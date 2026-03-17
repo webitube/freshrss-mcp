@@ -3,7 +3,7 @@
 import json
 import logging
 from typing import Dict, List, Optional, Any
-from urllib.parse import urljoin, quote
+from urllib.parse import urljoin, quote, urlencode
 from datetime import datetime
 
 import httpx
@@ -89,21 +89,21 @@ class FreshRSSClient:
         method: str,
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        data=None,
         auth_required: bool = True,
     ) -> Response:
         """Make an API request.
-        
+
         Args:
             method: HTTP method
             endpoint: API endpoint
             params: Query parameters
-            data: Form data for POST requests
+            data: Form data for POST requests (dict or list of tuples)
             auth_required: Whether authentication is required
-            
+
         Returns:
             HTTP response
-            
+
         Raises:
             AuthenticationError: If authentication is required but not available
             APIError: If the request fails
@@ -113,16 +113,26 @@ class FreshRSSClient:
             if not self.auth_token:
                 raise AuthenticationError("Not authenticated. Call authenticate() first.")
             headers["Authorization"] = f"GoogleLogin auth={self.auth_token}"
-        
+
         url = self._build_url(endpoint)
-        
+
+        # httpx 0.28 bug: passing a list of tuples as `data` to AsyncClient
+        # raises "Attempted to send a sync request with an AsyncClient instance".
+        # Workaround: manually urlencode and send as raw content.
+        kwargs: Dict[str, Any] = {}
+        if isinstance(data, list):
+            kwargs["content"] = urlencode(data).encode()
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+        else:
+            kwargs["data"] = data
+
         try:
             response = await self._client.request(
                 method=method,
                 url=url,
                 params=params,
-                data=data,
                 headers=headers,
+                **kwargs,
             )
             response.raise_for_status()
             return response
@@ -322,18 +332,18 @@ class FreshRSSClient:
         if not self.edit_token:
             await self.get_token()
         
-        data = {
-            "T": self.edit_token,
-            "a": "user/-/state/com.google/read",
-        }
-        
-        # Add item IDs
+        # Use list of tuples to allow multiple "i" keys for batch operations.
+        # A dict would overwrite duplicate keys, sending only the last item_id.
+        data = [
+            ("T", self.edit_token),
+            ("a", "user/-/state/com.google/read"),
+        ]
         for item_id in item_ids:
-            data[f"i"] = item_id
-        
+            data.append(("i", item_id))
+
         response = await self._request("POST", "reader/api/0/edit-tag", data=data)
         return EditResponse(status=response.text.strip())
-    
+
     async def mark_as_unread(self, item_ids: List[str]) -> EditResponse:
         """Mark articles as unread.
         
@@ -346,19 +356,17 @@ class FreshRSSClient:
         if not self.edit_token:
             await self.get_token()
         
-        data = {
-            "T": self.edit_token,
-            "a": "user/-/state/com.google/kept-unread",
-            "r": "user/-/state/com.google/read",
-        }
-        
-        # Add item IDs
+        data = [
+            ("T", self.edit_token),
+            ("a", "user/-/state/com.google/kept-unread"),
+            ("r", "user/-/state/com.google/read"),
+        ]
         for item_id in item_ids:
-            data[f"i"] = item_id
-        
+            data.append(("i", item_id))
+
         response = await self._request("POST", "reader/api/0/edit-tag", data=data)
         return EditResponse(status=response.text.strip())
-    
+
     async def star_article(self, item_ids: List[str]) -> EditResponse:
         """Star articles.
         
@@ -371,18 +379,16 @@ class FreshRSSClient:
         if not self.edit_token:
             await self.get_token()
         
-        data = {
-            "T": self.edit_token,
-            "a": "user/-/state/com.google/starred",
-        }
-        
-        # Add item IDs
+        data = [
+            ("T", self.edit_token),
+            ("a", "user/-/state/com.google/starred"),
+        ]
         for item_id in item_ids:
-            data[f"i"] = item_id
-        
+            data.append(("i", item_id))
+
         response = await self._request("POST", "reader/api/0/edit-tag", data=data)
         return EditResponse(status=response.text.strip())
-    
+
     async def unstar_article(self, item_ids: List[str]) -> EditResponse:
         """Unstar articles.
         
@@ -395,18 +401,16 @@ class FreshRSSClient:
         if not self.edit_token:
             await self.get_token()
         
-        data = {
-            "T": self.edit_token,
-            "r": "user/-/state/com.google/starred",
-        }
-        
-        # Add item IDs
+        data = [
+            ("T", self.edit_token),
+            ("r", "user/-/state/com.google/starred"),
+        ]
         for item_id in item_ids:
-            data[f"i"] = item_id
-        
+            data.append(("i", item_id))
+
         response = await self._request("POST", "reader/api/0/edit-tag", data=data)
         return EditResponse(status=response.text.strip())
-    
+
     async def add_label(self, item_ids: List[str], label: str) -> EditResponse:
         """Add label to articles.
         
@@ -420,15 +424,13 @@ class FreshRSSClient:
         if not self.edit_token:
             await self.get_token()
         
-        data = {
-            "T": self.edit_token,
-            "a": f"user/-/label/{label}",
-        }
-        
-        # Add item IDs
+        data = [
+            ("T", self.edit_token),
+            ("a", f"user/-/label/{label}"),
+        ]
         for item_id in item_ids:
-            data[f"i"] = item_id
-        
+            data.append(("i", item_id))
+
         response = await self._request("POST", "reader/api/0/edit-tag", data=data)
         return EditResponse(status=response.text.strip())
     
