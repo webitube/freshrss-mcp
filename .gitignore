@@ -1,2 +1,6 @@
 .env
 docker-compose.yml.local
+venv/
+src/freshrss_mcp/__pycache__/
+build/
+dist/

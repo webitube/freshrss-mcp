@@ -45,6 +45,7 @@ async def test_freshrss():
         for i, article in enumerate(articles.items, 1):
             print(f'   {i}. {article.title[:50]}...')
             print(f'      Read: {article.is_read}, Starred: {article.is_starred}')
+            print(f'      url: {article.url}')
             if article.feed_title:
                 print(f'      From: {article.feed_title}')
         
@@ -57,6 +58,7 @@ async def test_freshrss():
             print(f'✅ Found {len(unread_articles.items)} unread articles')
             for i, article in enumerate(unread_articles.items, 1):
                 print(f'   {i}. {article.title[:50]}...')
+                print(f'      url: {article.url}')
                 print(f'      From: {article.feed_title or "Unknown"}')
         
     except Exception as e:

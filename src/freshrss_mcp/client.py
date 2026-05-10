@@ -295,10 +295,11 @@ class FreshRSSClient:
                 published = datetime.fromtimestamp(item["published"])
             elif "crawlTimeMsec" in item:
                 published = datetime.fromtimestamp(int(item["crawlTimeMsec"]) / 1000)
-            
+
             article = Article(
                 id=item["id"],
                 title=item.get("title", ""),
+                url=self.extract_article_url(item),
                 published=published or datetime.now(),
                 updated=datetime.fromtimestamp(item["updated"]) if "updated" in item else None,
                 author=item.get("author"),
@@ -320,6 +321,52 @@ class FreshRSSClient:
             updated=data.get("updated"),
         )
     
+
+    def extract_href_from_list(self, items: list) -> str | None:
+        """
+        Extract the first non-empty href from a list of dictionaries.
+
+        Args:
+            items: List of dictionaries, each potentially containing an 'href' key
+
+        Returns:
+            The first non-empty href value found, None otherwise
+        """
+        if not isinstance(items, list):
+            return None
+
+        for item in items:
+            if isinstance(item, dict) and "href" in item:
+                href = item["href"]
+                if href and href.strip():
+                    return href
+        return None
+
+
+    def extract_article_url(self, item: dict) -> str | None:
+        """
+        Extract the article's URL from a dictionary item.
+
+        Tries to get the URL from 'canonical' first, then falls back to 'alternate'.
+        Returns None if the URL cannot be retrieved from either source.
+
+        Args:
+            item: Dictionary containing article metadata
+
+        Returns:
+            The article URL if found, None otherwise
+        """
+        canonical_href = self.extract_href_from_list(item.get("canonical", []))
+
+        if canonical_href:
+            return canonical_href
+
+        # Only extract alternate_href if canonical_href is not available
+        alternate_href = self.extract_href_from_list(item.get("alternate", []))
+
+        return alternate_href
+
+
     async def mark_as_read(self, item_ids: List[str]) -> EditResponse:
         """Mark articles as read.
         

@@ -54,6 +54,7 @@ class Article(BaseModel):
     
     id: str
     title: str
+    url: str
     published: datetime
     updated: Optional[datetime] = None
     author: Optional[str] = None
